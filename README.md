@@ -59,11 +59,18 @@ Empty-string digest (256-bit output, rate 160 bytes):
 
 ## Repository Contents
 
-- `krakken_multi.c` — Production AVX2 implementation of the permutation and sponge hash
+## Repository Contents
+
+- `krakken.c` / `krakken.h` — Reference scalar implementation of the permutation
+- `krakken_multi.c` — Production AVX2 implementation with parallel hashing
 - `degree_tracking.c` — Symbolic algebraic degree propagation analysis tool
-- `rebound_search/` — Z3-based inbound rebound matching scripts (3, 4, and 5 rounds)
+- `rebound_3round.py` — Z3-based inbound rebound search (3 rounds)
+- `rebound_4round.py` — Z3-based inbound rebound search (4 rounds)
+- `rebound_5round.py` — Z3-based inbound rebound search (5 rounds)
 - `milp_active_words.py` — MILP optimization for minimum active S-box bound
-- `test_vectors.txt` — Intermediate state test vectors for implementation verification
+- `verify_krakken.c` — Test vector verification
+- `Makefile` — Build instructions
+- `test_vectors.txt` — Intermediate state test vectors
 
 ## Paper
 
