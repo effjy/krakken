@@ -59,7 +59,7 @@ Empty-string digest (256-bit output, rate 160 bytes):
 
 ## Repository Contents
 
-- `krakken_avx2.c` — Production AVX2 implementation of the permutation and sponge hash
+- `krakken_multi.c` — Production AVX2 implementation of the permutation and sponge hash
 - `degree_tracking.c` — Symbolic algebraic degree propagation analysis tool
 - `rebound_search/` — Z3-based inbound rebound matching scripts (3, 4, and 5 rounds)
 - `milp_active_words.py` — MILP optimization for minimum active S-box bound
