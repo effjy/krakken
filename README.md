@@ -86,7 +86,7 @@ A full specification and security analysis is available in the accompanying pape
 
 ```bash
 # Requires GCC with AVX2 support
-gcc -O3 -mavx2 -pthread -o krakken_bench krakken_avx2.c
+gcc -O3 -mavx2 -pthread -o krakken_bench krakken_multi.c
 ./krakken_bench
 ```
 
