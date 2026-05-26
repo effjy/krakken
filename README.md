@@ -65,6 +65,8 @@ the GF(2⁸) MDS layer provides wide-trail bounds with branch number 9, while th
 | **Sponge padding** | Keccak multi-rate (0x06…0x80) |
 | **SIMD** | AVX2 — 32 S-box lookups in parallel via vpshufb tree |
 
+The domain string includes a trailing space character. This is intentional and must be preserved for reproducible derivation of round constants.
+
 ---
 
 ## Three Primary Contributions
