@@ -61,7 +61,7 @@ the GF(2⁸) MDS layer provides wide-trail bounds with branch number 9, while th
 | **S-box properties** | Nonlinearity 112, differential uniformity 4, algebraic degree 7, zero fixed points |
 | **Diffusion** | GF(2⁸) circulant MDS matrix with branch number 9 (Whirlpool coefficients) |
 | **Nonlinear layers** | SPN S-box (Chi) + 64-bit ARX (Pressure) |
-| **Round constants** | SHAKE-128-derived ("Krakken-2048 Abyssal v1 - Primary") |
+| **Round constants** | SHAKE-128-derived ("Krakken-2048 Abyssal v1 - Primary ") |
 | **Sponge padding** | Keccak multi-rate (0x06…0x80) |
 | **SIMD** | AVX2 — 32 S-box lookups in parallel via vpshufb tree |
 
