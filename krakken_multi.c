@@ -7,15 +7,29 @@
 #include <string.h>
 #include <sys/time.h>
 
+/* The number of permutation rounds to execute in the default Krakken permute function. */
 #define KRAKKEN_ROUNDS 10
 
+/**
+ * @brief Volatile wrapper to prevent compiler from optimizing away memory clearing operations.
+ */
 static void krakken_memset_wrap(void *p, int c, size_t n) { memset(p, c, n); }
 static void (*volatile krakken_memset_vol)(void *, int,
                                            size_t) = krakken_memset_wrap;
+
+/**
+ * @brief Overwrites memory with zeros to securely erase sensitive cryptographic data.
+ *
+ * @param ptr Pointer to the memory buffer to clear.
+ * @param n Size of the buffer in bytes.
+ */
 static void krakken_secure_zero(void *ptr, size_t n) {
   krakken_memset_vol(ptr, 0, n);
 }
 
+/**
+ * @brief Scalar circular left shift (rotation) of a 64-bit word.
+ */
 static inline uint64_t rotl64(uint64_t x, int n) {
   n &= 63;
   if (n == 0)
@@ -23,14 +37,24 @@ static inline uint64_t rotl64(uint64_t x, int n) {
   return (x << n) | (x >> (64 - n));
 }
 
+/* AVX2 Macro: circular right shift of 64-bit lanes (epi64) by an immediate constant. */
 #define MM256_ROTR_EPI64_IMM(x, n)                                             \
   _mm256_or_si256(_mm256_srli_epi64((x), (n)), _mm256_slli_epi64((x), 64 - (n)))
 
+/* AVX2 Macro: circular left shift of 64-bit lanes (epi64) by an immediate constant. */
 #define MM256_ROTL_EPI64_IMM(x, n)                                             \
   _mm256_or_si256(_mm256_slli_epi64((x), (n)), _mm256_srli_epi64((x), 64 - (n)))
 
+/* AVX2 Macro: rotate 64-bit lanes by 32 bits using dword (32-bit) shuffling. */
 #define MM256_ROT32_EPI64(x) _mm256_shuffle_epi32((x), 0xB1)
 
+/**
+ * @brief Performs circular left shift on 64-bit lanes by a variable shift count.
+ *
+ * @param x The 256-bit register containing 4 uint64_t lanes.
+ * @param n The shift count.
+ * @return The rotated register.
+ */
 static inline __m256i mm256_rotl_var_epi64(__m256i x, int n) {
   n &= 63;
   if (n == 0)
@@ -38,6 +62,13 @@ static inline __m256i mm256_rotl_var_epi64(__m256i x, int n) {
   return _mm256_or_si256(_mm256_slli_epi64(x, n), _mm256_srli_epi64(x, 64 - n));
 }
 
+/**
+ * @brief Pre-formatted S-box Lookup Table aligned for AVX2 loading.
+ *
+ * Stored as 16 rows of 32 bytes. Each row contains two identical 16-byte blocks
+ * representing a segment of the S-box. This dual structure is required by the
+ * 128-bit lane-isolated behavior of `_mm256_shuffle_epi8`.
+ */
 static const uint8_t __attribute__((aligned(32))) SBOX_LUT[16][32] = {
     {0xA5,0xB6,0xDE,0xF7,0x18,0x37,0x8C,0xC1,0x89,0xDA,0x1E,0x85,0x31,0xF0,0x97,0x77,0xA5,0xB6,0xDE,0xF7,0x18,0x37,0x8C,0xC1,0x89,0xDA,0x1E,0x85,0x31,0xF0,0x97,0x77},
     {0x41,0x14,0xE8,0xC8,0x8A,0x04,0xB5,0x69,0x1D,0x2B,0x0F,0x2C,0x4E,0x19,0xCC,0x79,0x41,0x14,0xE8,0xC8,0x8A,0x04,0xB5,0x69,0x1D,0x2B,0x0F,0x2C,0x4E,0x19,0xCC,0x79},
@@ -56,16 +87,31 @@ static const uint8_t __attribute__((aligned(32))) SBOX_LUT[16][32] = {
     {0xD8,0x17,0xE0,0xBB,0x46,0x6C,0xAC,0xA8,0x05,0x7E,0x8E,0x33,0xC4,0xD4,0x59,0xBD,0xD8,0x17,0xE0,0xBB,0x46,0x6C,0xAC,0xA8,0x05,0x7E,0x8E,0x33,0xC4,0xD4,0x59,0xBD},
     {0xBF,0xF3,0x20,0x34,0x90,0xCD,0xEC,0x63,0x47,0x95,0x12,0x6D,0xD3,0x5A,0xC0,0x7C,0xBF,0xF3,0x20,0x34,0x90,0xCD,0xEC,0x63,0x47,0x95,0x12,0x6D,0xD3,0x5A,0xC0,0x7C}};
 
+/**
+ * @brief Applies the Abyssal S-box to all 32 bytes in a 256-bit register in parallel.
+ *
+ * This vectorized function avoids slow scalar lookups by using a binary multiplexer (blend) tree.
+ * The input register is split into low nibbles (bits 0-3) and high nibbles (bits 4-7).
+ * - Low nibbles are used as indices for parallel shuffles via `_mm256_shuffle_epi8`.
+ * - High nibbles are treated as row selectors. Shuffled outcomes are blended together using
+ *   the bits of the high nibbles as control masks. This constructs a constant-time
+ *   lookup for the entire 256-bit vector.
+ *
+ * @param x The 256-bit register of 32 bytes to lookup.
+ * @return The looked-up 256-bit register.
+ */
 static inline __m256i sbox8_abyssal256(__m256i x) {
   __m256i mask = _mm256_set1_epi8(0x0F);
   __m256i lo = _mm256_and_si256(x, mask);
   __m256i hi = _mm256_and_si256(_mm256_srli_epi64(x, 4), mask);
 
+  // Extract each bit of the high nibble to control the blend selector levels
   __m256i b0 = _mm256_slli_epi16(hi, 7);
   __m256i b1 = _mm256_slli_epi16(hi, 6);
   __m256i b2 = _mm256_slli_epi16(hi, 5);
   __m256i b3 = _mm256_slli_epi16(hi, 4);
 
+  // Level 0 Blend Tree: Shuffle with low nibble on SBOX_LUT rows and blend using high-nibble bit 0
   __m256i l0 =
       _mm256_shuffle_epi8(_mm256_load_si256((const __m256i *)SBOX_LUT[0]), lo);
   __m256i l1 =
@@ -77,6 +123,8 @@ static inline __m256i sbox8_abyssal256(__m256i x) {
   __m256i l3 =
       _mm256_shuffle_epi8(_mm256_load_si256((const __m256i *)SBOX_LUT[3]), lo);
   __m256i m01 = _mm256_blendv_epi8(l2, l3, b0);
+
+  // Level 1 Blend: Blend combinations using high-nibble bit 1
   __m256i m10 = _mm256_blendv_epi8(m00, m01, b1);
 
   __m256i l4 =
@@ -92,6 +140,7 @@ static inline __m256i sbox8_abyssal256(__m256i x) {
   __m256i m03 = _mm256_blendv_epi8(l6, l7, b0);
   __m256i m11 = _mm256_blendv_epi8(m02, m03, b1);
 
+  // Level 2 Blend: Blend combinations using high-nibble bit 2
   __m256i m20 = _mm256_blendv_epi8(m10, m11, b2);
 
   __m256i l8 =
@@ -121,13 +170,17 @@ static inline __m256i sbox8_abyssal256(__m256i x) {
   __m256i m13 = _mm256_blendv_epi8(m06, m07, b1);
 
   __m256i m21 = _mm256_blendv_epi8(m12, m13, b2);
+
+  // Level 3 Blend (Final Selector): Blend left and right trees using high-nibble bit 3
   return _mm256_blendv_epi8(m20, m21, b3);
 }
 
+/* The rotation offsets for the 32 state words. */
 static const uint64_t rho[32] __attribute__((aligned(32))) = {
     32, 1,  62, 28, 36, 44, 15, 61, 6,  19, 24, 55, 3, 10, 43, 17,
     25, 39, 41, 59, 47, 8,  56, 14, 18, 35, 21, 33, 2, 49, 22, 51};
 
+/* Keccak round constants for generating round constants. */
 static const uint64_t keccak_rc[24] = {
     0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808AULL,
     0x8000000080008000ULL, 0x000000000000808BULL, 0x0000000080000001ULL,
@@ -138,6 +191,9 @@ static const uint64_t keccak_rc[24] = {
     0x000000000000800AULL, 0x800000008000000AULL, 0x8000000080008081ULL,
     0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL};
 
+/**
+ * @brief Standard Keccak-f[1600] permutation.
+ */
 static void keccakf1600(uint64_t st[25]) {
   static const int rho_off[24] = {1,  3,  6,  10, 15, 21, 28, 36,
                                   45, 55, 2,  14, 27, 41, 56, 8,
@@ -170,6 +226,9 @@ static void keccakf1600(uint64_t st[25]) {
   }
 }
 
+/**
+ * @brief SHAKE128 XOF utility for generating round constants.
+ */
 static void shake128_squeeze(const char *domain, uint8_t *out, size_t outlen) {
   uint64_t st[25] = {0};
   const size_t rate = 168;
@@ -190,14 +249,24 @@ static void shake128_squeeze(const char *domain, uint8_t *out, size_t outlen) {
   }
 }
 
+/* Aligned storage for round constants. */
 static uint64_t rc[KRAKKEN_ROUNDS][32] __attribute__((aligned(32)));
+/* Aligned round constants formatted as vectors of 4 uint64_t values. */
 static __m256i RC_VEC[KRAKKEN_ROUNDS][8] __attribute__((aligned(32)));
+/* Rotation constants vectors. */
 static __m256i RHO_VEC[8] __attribute__((aligned(32)));
+/* Inverse rotation constants vectors (64 - RHO). */
 static __m256i RHO_INV_VEC[8] __attribute__((aligned(32)));
+/* Thread-safe control block for one-time initialization. */
 static pthread_once_t g_rc_once = PTHREAD_ONCE_INIT;
+/* Pre-computed low-nibble multiplication table for MDS multiplication. */
 static __m256i MDS_TBL_LO[16] __attribute__((aligned(32)));
+/* Pre-computed high-nibble multiplication table for MDS multiplication. */
 static __m256i MDS_TBL_HI[16] __attribute__((aligned(32)));
 
+/**
+ * @brief Multiplies two bytes in GF(2^8) using generator polynomial x^8 + x^4 + x^3 + x^2 + 1 (0x1D).
+ */
 static uint8_t gf28_mul_impl(uint8_t a, uint8_t b) {
   uint8_t p = 0;
   for (int i = 0; i < 8; i++) {
@@ -212,6 +281,15 @@ static uint8_t gf28_mul_impl(uint8_t a, uint8_t b) {
   return p;
 }
 
+/**
+ * @brief Populates the round constants and pre-computes the AVX2 table values.
+ *
+ * This initializes:
+ * 1. Round constant vectors (RC_VEC) by squeezing SHAKE128 and resolving zeros.
+ * 2. RHO and RHO_INV vectors for variable-bit parallel rotation.
+ * 3. GF(2^8) MDS lookup tables (MDS_TBL_LO, MDS_TBL_HI) mapping low and high 4-bit nibbles
+ *    multiplied by MDS coefficients, optimized for AVX2 parallel matrix multiplication.
+ */
 static void _rc_init_impl(void) {
   uint8_t buf[KRAKKEN_ROUNDS * 32 * 8];
   shake128_squeeze("Krakken-2048 Abyssal v1 - Primary ", buf, sizeof(buf));
@@ -224,6 +302,7 @@ static void _rc_init_impl(void) {
                    ((uint64_t)p[6] << 48) | ((uint64_t)p[7] << 56);
       rc[ir][i] = v ? v : 0xDEADBEEFCAFEBABEULL;
     }
+    // Load round constants directly into __m256i vectors (8 vectors of 4 elements each = 32 elements)
     for (int c = 0; c < 8; c++)
       RC_VEC[ir][c] = _mm256_load_si256((const __m256i *)&rc[ir][c * 4]);
   }
@@ -233,6 +312,7 @@ static void _rc_init_impl(void) {
     RHO_INV_VEC[c] = _mm256_sub_epi64(c64, RHO_VEC[c]);
   }
 
+  // Pre-calculate GF(2^8) S-box lookup tables for the MDS multiplication coefficients
   static const uint8_t coeffs[8] = {0x01, 0x01, 0x04, 0x01,
                                     0x08, 0x05, 0x02, 0x09};
   for (int i = 0; i < 8; i++) {
@@ -257,8 +337,18 @@ static void _rc_init_impl(void) {
 
 void init_rc_vectors_avx2(void) { pthread_once(&g_rc_once, _rc_init_impl); }
 
+/**
+ * @brief Vectorized Theta step: linear diffusion step across state columns.
+ *
+ * For each column c (represented as a 256-bit register containing 4 uint64_t elements),
+ * it calculates the parity vector P. Then, it shifts and XORs parity columns together,
+ * and XORs the result back into the main columns.
+ *
+ * @param cols The 8 column registers of the state.
+ */
 static inline __attribute__((always_inline)) void theta_regs(__m256i cols[8]) {
   __m256i P[8];
+  // Calculate column parity by shuffling and XOR-reducing the row elements
   for (int c = 0; c < 8; c++) {
     __m256i t = _mm256_xor_si256(cols[c], _mm256_shuffle_epi32(cols[c], 0x4E));
     P[c] = _mm256_xor_si256(t, _mm256_permute2x128_si256(t, t, 0x01));
@@ -270,23 +360,41 @@ static inline __attribute__((always_inline)) void theta_regs(__m256i cols[8]) {
   }
 }
 
+/**
+ * @brief Multiplies each byte of register x by the MDS coefficient at k_idx in GF(2^8).
+ *
+ * Uses low/high nibble shuffles via precomputed lookup tables.
+ *
+ * @param x The input register.
+ * @param k_idx Index of the MDS coefficient (0-7).
+ * @return The multiplied register.
+ */
 static inline __m256i mm256_gf28_mul_k(__m256i x, int k_idx) {
   __m256i mask = _mm256_set1_epi8(0x0F);
   __m256i lo = _mm256_and_si256(x, mask);
   __m256i hi = _mm256_and_si256(_mm256_srli_epi64(x, 4), mask);
   return _mm256_xor_si256(_mm256_shuffle_epi8(MDS_TBL_LO[k_idx], lo),
-                          _mm256_shuffle_epi8(MDS_TBL_HI[k_idx], hi));
+                            _mm256_shuffle_epi8(MDS_TBL_HI[k_idx], hi));
 }
 
+/* Helper macro to perform multiply-XOR on a register with precomputed MDS lookup tables. */
 #define MDS_MUL_XOR(out_c, in_idx, tlo, thi)                                   \
   out_c = _mm256_xor_si256(                                                    \
       out_c, _mm256_xor_si256(_mm256_shuffle_epi8(tlo, lo[in_idx]),            \
                               _mm256_shuffle_epi8(thi, hi[in_idx])))
 
+/**
+ * @brief Vectorized Tentacle MDS step: circulant matrix multiplication on state columns.
+ *
+ * Applies circulant multiplication of row elements using the precomputed GF(2^8) multiplication tables.
+ *
+ * @param cols The 8 column registers of the state.
+ */
 static inline __attribute__((always_inline)) void tentacle_mds_regs(__m256i cols[8]) {
   __m256i out[8], lo[8], hi[8];
   __m256i mask = _mm256_set1_epi8(0x0F);
 
+  // Extract low/high nibbles for all 8 columns in parallel
   for (int c = 0; c < 8; c++) {
     lo[c] = _mm256_and_si256(cols[c], mask);
     hi[c] = _mm256_and_si256(_mm256_srli_epi64(cols[c], 4), mask);
@@ -300,6 +408,7 @@ static inline __attribute__((always_inline)) void tentacle_mds_regs(__m256i cols
   __m256i tlo6 = MDS_TBL_LO[6], thi6 = MDS_TBL_HI[6];
   __m256i tlo7 = MDS_TBL_LO[7], thi7 = MDS_TBL_HI[7];
 
+  // Perform circulant matrix multiplication for each column
   for (int c = 0; c < 8; c++) {
     MDS_MUL_XOR(out[c], (c + 2) & 7, tlo2, thi2);
     MDS_MUL_XOR(out[c], (c + 4) & 7, tlo4, thi4);
@@ -312,6 +421,13 @@ static inline __attribute__((always_inline)) void tentacle_mds_regs(__m256i cols
     cols[c] = out[c];
 }
 
+/**
+ * @brief Vectorized Rho step: rotates bits within each 64-bit word of the columns.
+ *
+ * Uses `_mm256_sllv_epi64` and `_mm256_srlv_epi64` to rotate the elements in each column register.
+ *
+ * @param cols The 8 column registers.
+ */
 static inline __attribute__((always_inline)) void rho_regs(__m256i cols[8]) {
   for (int c = 0; c < 8; c++) {
     cols[c] = _mm256_or_si256(_mm256_sllv_epi64(cols[c], RHO_VEC[c]),
@@ -319,6 +435,14 @@ static inline __attribute__((always_inline)) void rho_regs(__m256i cols[8]) {
   }
 }
 
+/**
+ * @brief Vectorized Pi step: permutes word layouts using register blends.
+ *
+ * Combines elements from different registers using `_mm256_blend_epi32` to perform
+ * the matrix layout coordinate transformation.
+ *
+ * @param cols The 8 column registers.
+ */
 static inline __attribute__((always_inline)) void pi_regs(__m256i cols[8]) {
   __m256i out[8];
   for (int c = 0; c < 8; c++) {
@@ -330,6 +454,13 @@ static inline __attribute__((always_inline)) void pi_regs(__m256i cols[8]) {
     cols[c] = out[c];
 }
 
+/**
+ * @brief Vectorized Chi step: applies sbox8_abyssal256 on mixed column pairs.
+ *
+ * Pairs adjacent columns, XORs rotated versions, and performs parallel constant-time S-box lookup.
+ *
+ * @param cols The 8 column registers.
+ */
 static inline __attribute__((always_inline)) void chi_regs(__m256i cols[8]) {
   for (int p = 0; p < 4; p++) {
     __m256i a = cols[p * 2];
@@ -343,6 +474,7 @@ static inline __attribute__((always_inline)) void chi_regs(__m256i cols[8]) {
   }
 }
 
+/* Helper macro for localized Addition-Rotation-Xor within column-transposed lanes. */
 #define PRESSURE_ROUND_VEC(a, b, c, d)                                         \
   do {                                                                         \
     a = _mm256_add_epi64(a, _mm256_xor_si256(c, _mm256_srli_epi64(c, 17)));    \
@@ -351,6 +483,16 @@ static inline __attribute__((always_inline)) void chi_regs(__m256i cols[8]) {
     d = _mm256_add_epi64(d, _mm256_xor_si256(b, _mm256_slli_epi64(b, 31)));    \
   } while (0)
 
+/**
+ * @brief Vectorized Pressure ARX step: applies ARX mixing on column elements.
+ *
+ * In order to perform the row-wise ARX steps on column-aligned elements, it first
+ * transposes the state registers (cols[0-3] and cols[4-7]) using unpack and permute instructions.
+ * Once elements are aligned row-wise, it runs the PRESSURE_ROUND_VEC mixing math.
+ * Finally, it rotates and transposes the outputs back to column registers.
+ *
+ * @param cols The 8 column registers.
+ */
 static inline __attribute__((always_inline)) void pressure_arx_regs(__m256i cols[8]) {
   __m256i u0 = _mm256_unpacklo_epi64(cols[0], cols[1]);
   __m256i u1 = _mm256_unpackhi_epi64(cols[0], cols[1]);
@@ -378,6 +520,7 @@ static inline __attribute__((always_inline)) void pressure_arx_regs(__m256i cols
   b2 = MM256_ROTL_EPI64_IMM(b2, 7);
   d2 = MM256_ROTL_EPI64_IMM(d2, 19);
 
+  // Transpose back to column format
   __m256i r0 = _mm256_unpacklo_epi64(a, b);
   __m256i r1 = _mm256_unpackhi_epi64(a, b);
   __m256i r2 = _mm256_unpacklo_epi64(c, d);
@@ -397,12 +540,26 @@ static inline __attribute__((always_inline)) void pressure_arx_regs(__m256i cols
   cols[7] = _mm256_permute2x128_si256(r5, r7, 0x31);
 }
 
+/**
+ * @brief Vectorized Beta-Iota step: XORs the precomputed round constant vectors (RC_VEC).
+ *
+ * @param cols The 8 column registers.
+ * @param round The current round index.
+ */
 static inline __attribute__((always_inline)) void beta_iota_regs(__m256i cols[8], int round) {
   for (int c = 0; c < 8; c++) {
     cols[c] = _mm256_xor_si256(cols[c], RC_VEC[round][c]);
   }
 }
 
+/**
+ * @brief Vectorized Ink Cloud Shuffle step: shuffles register lanes and elements.
+ *
+ * Rotates the 64-bit words by 11 bits in parallel, and uses `_mm256_permute4x64_epi64`
+ * and `_mm256_blend_epi32` to perform the matrix index shuffle.
+ *
+ * @param cols The 8 column registers.
+ */
 static inline __attribute__((always_inline)) void ink_cloud_regs(__m256i cols[8]) {
   for (int c = 0; c < 8; c++)
     cols[c] = MM256_ROTL_EPI64_IMM(cols[c], 11);
@@ -453,6 +610,7 @@ static inline __attribute__((always_inline)) void ink_cloud_regs(__m256i cols[8]
 }
 
 void krakken_permute_avx2_rounds(uint64_t state[32], int rounds) {
+  // Dynamically initialize round constant vectors if not already done
   init_rc_vectors_avx2();
   if (rounds <= 0)
     return;
@@ -461,6 +619,7 @@ void krakken_permute_avx2_rounds(uint64_t state[32], int rounds) {
   __m256i cols[8];
   for (int c = 0; c < 8; c++)
     cols[c] = _mm256_loadu_si256((const __m256i *)&state[c * 4]);
+  // Execute rounds on the registers
   for (int ir = 0; ir < rounds; ir++) {
     theta_regs(cols);
     tentacle_mds_regs(cols);
@@ -479,6 +638,9 @@ void krakken_permute_avx2(uint64_t state[32]) {
   krakken_permute_avx2_rounds(state, KRAKKEN_ROUNDS);
 }
 
+/**
+ * @brief Vectorized absorb phase: XORs message block data into the sponge state.
+ */
 static inline void absorb_rate_avx2(uint8_t state_b[256], const uint8_t *msg) {
   __m256i *sp = (__m256i *)state_b;
   for (int i = 0; i < 5; i++) {
@@ -501,6 +663,7 @@ void krakken_hash_avx2(uint8_t *out, size_t outlen, const uint8_t *in,
   const uint8_t *msg = in;
   size_t rem = inlen;
 
+  // Absorbing phase: XOR 160-byte blocks using AVX2 registers, and permute state.
   while (rem >= 160) {
     absorb_rate_avx2(state.b, msg);
     krakken_permute_avx2(state.w);
@@ -508,6 +671,7 @@ void krakken_hash_avx2(uint8_t *out, size_t outlen, const uint8_t *in,
     rem -= 160;
   }
 
+  // Handle remaining bytes and pad using multi-rate padding.
   uint8_t block[160] __attribute__((aligned(32)));
   memset(block, 0, 160);
   if (rem > 0)
@@ -518,6 +682,7 @@ void krakken_hash_avx2(uint8_t *out, size_t outlen, const uint8_t *in,
   absorb_rate_avx2(state.b, block);
   krakken_permute_avx2(state.w);
 
+  // Squeezing phase: extract hash digest bytes.
   while (outlen > 0) {
     size_t take = outlen < 160 ? outlen : 160;
     memcpy(out, state.b, take);
@@ -527,22 +692,29 @@ void krakken_hash_avx2(uint8_t *out, size_t outlen, const uint8_t *in,
       krakken_permute_avx2(state.w);
   }
 
+  // Clear sensitive stack buffers
   krakken_secure_zero(state.b, 256);
   krakken_secure_zero(block, 160);
 }
 
+/* Cryptographic input stream properties. */
 typedef struct {
   uint8_t *out;
   size_t outlen;
   const uint8_t *in;
   size_t inlen;
 } krakken_stream_t;
+
+/* Arguments passed to parallel hashing worker threads. */
 typedef struct {
   const krakken_stream_t *streams;
   int start;
   int end;
 } krakken_worker_arg_t;
 
+/**
+ * @brief Thread entry point performing AVX2 hashing on a segment of input streams.
+ */
 static void *krakken_parallel_worker(void *arg) {
   const krakken_worker_arg_t *w = (const krakken_worker_arg_t *)arg;
   for (int i = w->start; i < w->end; i++)
@@ -551,6 +723,18 @@ static void *krakken_parallel_worker(void *arg) {
   return NULL;
 }
 
+/**
+ * @brief Performs concurrent multi-stream hashing using a POSIX threads worker pool.
+ *
+ * Distributes `n` hash jobs across `n_threads` threads. Each thread executes `krakken_hash_avx2`
+ * on its assigned slice of streams. Includes error handling fallback to run jobs sequentially
+ * on the calling thread if thread creation fails.
+ *
+ * @param streams Array of stream configurations.
+ * @param n Total number of streams.
+ * @param n_threads Number of concurrent threads to spawn.
+ * @return 0 on success, -1 on allocation/threading failure.
+ */
 int krakken_hash_avx2_parallel(const krakken_stream_t *streams, int n,
                                int n_threads) {
   if (n <= 0)
@@ -571,7 +755,7 @@ int krakken_hash_avx2_parallel(const krakken_stream_t *streams, int n,
     return -1;
   }
 
-  // Initialize args array completely first
+  // Partition the streams array range among threads
   int base = n / n_threads, extra = n % n_threads, cur = 0;
   for (int t = 0; t < n_threads; t++) {
     args[t].streams = streams;
@@ -584,8 +768,10 @@ int krakken_hash_avx2_parallel(const krakken_stream_t *streams, int n,
   int rc_ret = 0;
   for (int t = 0; t < n_threads; t++) {
     if (pthread_create(&tids[t], NULL, krakken_parallel_worker, &args[t]) != 0) {
+      // Fallback: run remaining jobs sequentially if thread creation fails
       for (int j = t; j < n_threads; j++)
         krakken_parallel_worker(&args[j]);
+      // Wait for already created threads to join
       for (int j = 0; j < t; j++)
         pthread_join(tids[j], NULL);
       rc_ret = -1;

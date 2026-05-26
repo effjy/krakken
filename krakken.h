@@ -1,25 +1,103 @@
 #ifndef KRAKKEN_H
 #define KRAKKEN_H
 
+/**
+ * @file krakken.h
+ * @brief Header file for the Krakken-2048 hashing algorithm (Abyssal variant).
+ *
+ * Krakken-2048 is a cryptographic permutation and hashing function operating on
+ * a 2048-bit state (represented as 32 of 64-bit unsigned integers). It supports both
+ * scalar and AVX2-accelerated implementations of the permutation and sponge construction.
+ */
+
 #include <stdint.h>
 #include <stddef.h>
 
+/**
+ * @brief Initializes the round constants (RC) vectors for the scalar implementation.
+ *
+ * This function is thread-safe and initializes the round constants using SHAKE-128
+ * as an extendable output function.
+ */
 void init_rc_vectors(void);
+
+/**
+ * @brief Initializes the round constants (RC) vectors optimized for AVX2.
+ *
+ * Designed to pre-format or align round constants for vector instructions.
+ */
 void init_rc_vectors_avx2(void);
 
+/**
+ * @brief Retrieves a pointer to the round constants for a specific permutation round.
+ *
+ * @param round The round index (0 to KRAKKEN_ROUNDS - 1).
+ * @return A pointer to the 32 uint64_t round constants for the given round.
+ */
 const uint64_t *rc_get(int round);
 
+/**
+ * @brief Performs the default 10-round Krakken permutation on a 2048-bit state (scalar).
+ *
+ * @param state The 2048-bit state array of 32 uint64_t elements to permute in-place.
+ */
 void krakken_permute_scalar(uint64_t state[32]);
+
+/**
+ * @brief Performs the default 10-round Krakken permutation on a 2048-bit state (AVX2).
+ *
+ * @param state The 2048-bit state array of 32 uint64_t elements to permute in-place.
+ */
 void krakken_permute_avx2(uint64_t state[32]);
 
+/**
+ * @brief Performs a variable number of permutation rounds on the 2048-bit state (scalar).
+ *
+ * @param state The 2048-bit state array of 32 uint64_t elements to permute in-place.
+ * @param rounds The number of permutation rounds to execute.
+ */
 void krakken_permute_scalar_rounds(uint64_t state[32], int rounds);
+
+/**
+ * @brief Performs a variable number of permutation rounds on the 2048-bit state (AVX2).
+ *
+ * @param state The 2048-bit state array of 32 uint64_t elements to permute in-place.
+ * @param rounds The number of permutation rounds to execute.
+ */
 void krakken_permute_avx2_rounds(uint64_t state[32], int rounds);
 
+/**
+ * @brief Hashes an input buffer using the Krakken-2048 scalar implementation.
+ *
+ * This function uses a sponge construction with a rate of 160 bytes and capacity of 96 bytes.
+ *
+ * @param out Pointer to the output buffer where the digest will be written.
+ * @param outlen The length of the requested hash output in bytes.
+ * @param in Pointer to the input message buffer.
+ * @param inlen The length of the input message in bytes.
+ */
 void krakken_hash_scalar(uint8_t *out, size_t outlen,
                          const uint8_t *in, size_t inlen);
+
+/**
+ * @brief Hashes an input buffer using the Krakken-2048 AVX2 implementation.
+ *
+ * This function uses a sponge construction with a rate of 160 bytes and capacity of 96 bytes.
+ *
+ * @param out Pointer to the output buffer where the digest will be written.
+ * @param outlen The length of the requested hash output in bytes.
+ * @param in Pointer to the input message buffer.
+ * @param inlen The length of the input message in bytes.
+ */
 void krakken_hash_avx2(uint8_t *out, size_t outlen,
                        const uint8_t *in, size_t inlen);
 
+/**
+ * @brief The Abyssal non-linear 8-bit S-Box lookup table.
+ *
+ * This S-box is a permutation of the 256 byte values used in the non-linear
+ * transformation steps of the permutation function.
+ */
 static const uint8_t ABYSSAL_SBOX[256] = {
     0xA5, 0xB6, 0xDE, 0xF7, 0x18, 0x37, 0x8C, 0xC1, 0x89, 0xDA, 0x1E, 0x85, 0x31, 0xF0, 0x97, 0x77,
     0x41, 0x14, 0xE8, 0xC8, 0x8A, 0x04, 0xB5, 0x69, 0x1D, 0x2B, 0x0F, 0x2C, 0x4E, 0x19, 0xCC, 0x79,
@@ -39,10 +117,25 @@ static const uint8_t ABYSSAL_SBOX[256] = {
     0xBF, 0xF3, 0x20, 0x34, 0x90, 0xCD, 0xEC, 0x63, 0x47, 0x95, 0x12, 0x6D, 0xD3, 0x5A, 0xC0, 0x7C
 };
 
+/**
+ * @brief Computes a constant-time lookup in the Abyssal S-box.
+ *
+ * This function performs a linear scan over all 256 entries of the S-box,
+ * utilizing bitwise operations to compute the target entry match without
+ * using data-dependent branching or array indexing, mitigating cache-timing
+ * side-channel attacks.
+ *
+ * @param byte The input byte to look up.
+ * @return The corresponding S-box value.
+ */
 static inline uint8_t abyssal_sbox8(uint8_t byte) {
     uint8_t res = 0;
     for (int i = 0; i < 256; i++) {
         uint8_t diff = byte ^ i;
+        // If diff == 0, then (diff - 1) is 0xFFFFFFFF, and shifting right by 31 yields 1.
+        // If diff != 0, then (diff - 1) has the sign bit set or not depending on values, 
+        // but here diff is uint8_t, and promoted to uint32_t. For diff in [1..255], 
+        // (uint32_t)diff - 1 is in [0..254], so shifting right by 31 yields 0.
         uint8_t match = (uint8_t)(((uint32_t)diff - 1) >> 31);
         res |= (uint8_t)(-match & ABYSSAL_SBOX[i]);
     }
