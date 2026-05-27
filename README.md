@@ -7,7 +7,7 @@
 [![Rounds](https://img.shields.io/badge/rounds-10-orange)]()
 [![Standard](https://img.shields.io/badge/standard-Sponge%20(AEAD)-blue)]()
 
-<img src="kraken_logo.png" alt="Krakken-2048 Abyssal Logo" width="200">
+<img src="https://github.com/effjy/krakken/blob/main/krakken_logo.png" alt="Krakken-2048 Abyssal Logo" width="200">
 
 ---
 
