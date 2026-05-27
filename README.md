@@ -7,10 +7,6 @@
 [![Rounds](https://img.shields.io/badge/rounds-10-orange)]()
 [![Standard](https://img.shields.io/badge/standard-Sponge%20(AEAD)-blue)]()
 
-<p align="center">
-  <img src="https://avatars.githubusercontent.com/u/278838394?s=400&u=831b3277a3dde29d72434f89d3c68c74a9695377&v=4" alt="Krakken-Disk Logo" width="200"/>
-</p>
-
 ---
 
 ## Overview
