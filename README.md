@@ -174,6 +174,7 @@ Empty-string digest (256-bit output, sponge rate 160 bytes):
 | `rebound_4round.py` | Z3-based inbound rebound search (4 rounds) |
 | `rebound_5round.py` | Z3-based inbound rebound search (5 rounds) |
 | `milp_active_words.py` | MILP optimization for minimum active S-box bound |
+| `milp_active_sboxes_byte.py` | Byte‑level MILP for minimum active S‑boxes (45 over 10 rounds) |
 | `verify_krakken.c` | Test vector verification |
 | `Makefile` | Build instructions |
 | `test_vectors.txt` | Intermediate state test vectors |
