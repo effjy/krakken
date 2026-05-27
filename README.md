@@ -227,3 +227,4 @@ This project is released under the MIT License. See [LICENSE](LICENSE) for detai
 
 *This repository accompanies a paper submitted for peer review. The permutation has been in private development since 2016 and is now being released for public scrutiny and independent cryptanalysis.*
 ```
+[![Kraken](https://img.shields.io/badge/tentacles-9-blue?logo=octopus&logoColor=white)]()
