@@ -6,6 +6,7 @@
 [![State](https://img.shields.io/badge/state-2048--bit-brightgreen)]()
 [![Rounds](https://img.shields.io/badge/rounds-10-orange)]()
 [![Standard](https://img.shields.io/badge/standard-Sponge%20(AEAD)-blue)]()
+[![Tentacles](https://img.shields.io/badge/tentacles-9-00FFCC)](https://github.com/effjy/krakken)
 
 <p align="center"><img src="https://github.com/effjy/krakken/blob/main/krakken_logo.png" alt="Krakken-2048 Abyssal Logo" width="200"></p>
 
@@ -225,4 +226,4 @@ This project is released under the MIT License. See [LICENSE](LICENSE) for detai
 
 ---
 
-*This repository accompanies a paper submitted for peer review. The permutation has been in private development since 2016 and is now being released for public [![Tentacles](https://img.shields.io/badge/tentacles-9-00FFCC)](https://github.com/effjy/krakken)
+*This repository accompanies a paper submitted for peer review. The permutation has been in private development since 2016 and is now being released for public [!
