@@ -177,6 +177,25 @@ Empty-string digest (256-bit output, sponge rate 160 bytes):
 
 ---
 
+## Complete Cryptanalysis Scripts
+
+The repository includes **205 C and Python scripts** used for cryptanalysis, covering:
+
+- Algebraic degree propagation (exact ANF, symbolic tracking, cube tests)
+- Rebound attacks (Z3-based inbound matching for 3, 4, and 5 rounds)
+- MILP/SMT optimization (active S-box lower bounds, trail search)
+- Invariant subspace analysis (eigenvector, periodic-word testing)
+- Rotational symmetry audit (word/column/global rotations)
+- Differential/linear trail search (wide-trail estimation)
+- Boomerang and differential-linear cryptanalysis
+- S-box property validation (nonlinearity, uniformity, BCT, fixed points)
+
+For a **complete listing of all 205 scripts** organized by category, see:
+
+➡️ **[`SCRIPTS.md`](SCRIPTS.md) — Full cryptanalysis script inventory**
+
+---
+
 ## Paper
 
 A full specification and security analysis is available in the accompanying paper:
