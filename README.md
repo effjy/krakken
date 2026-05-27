@@ -221,7 +221,7 @@ This project is released under the MIT License. See [LICENSE](LICENSE) for detai
 **Jean-François Lachance-Caumartin**
 - ORCID: [0009-0005-6377-1675](https://orcid.org/0009-0005-6377-1675)
 - GitHub: [@effjy](https://github.com/effjy)
-- **Gravatar**: [Profile](https://gravatar.com/luminous0816ec2f7a)
+- Gravatar: [Profile](https://gravatar.com/luminous0816ec2f7a)
 
 ---
 
