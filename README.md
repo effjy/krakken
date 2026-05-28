@@ -212,6 +212,15 @@ A full specification and security analysis is available in the accompanying pape
 
 ---
 
+## 🔗 Related Projects
+
+- **[Krakken-Disk](https://github.com/effjy/krakken-disk)** – A post‑quantum encrypted disk manager for Linux, powered by the Krakken‑2048 permutation.
+- **[vWipe Turbo](https://github.com/effjy/vwipe)** – A high‑performance, forensic‑grade secure data and RAM sanitization suite.
+
+*These projects are part of the Krakken cryptographic ecosystem.*
+
+---
+
 ## License
 
 This project is released under the MIT License. See [LICENSE](LICENSE) for details.
