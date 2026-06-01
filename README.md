@@ -7,10 +7,24 @@
 [![Rounds](https://img.shields.io/badge/rounds-10-orange)]()
 [![Standard](https://img.shields.io/badge/standard-Sponge%20AEAD-blue)]()
 [![Tentacles](https://img.shields.io/badge/tentacles-9-00FFCC)](https://github.com/effjy/krakken)
+[![DOI](https://img.shields.io/badge/DOI-10.6084/m9.figshare.32527359-blue)](https://doi.org/10.6084/m9.figshare.32527359)
 
 <p align="center">
   <img src="https://github.com/effjy/krakken/blob/main/krakken_logo.png" alt="Krakken-2048 Abyssal Logo" width="240">
 </p>
+
+---
+
+## Paper
+
+**Krakken-2048 Abyssal: An SPN-ARX Hybrid Permutation and the Case for Algebraic Structure Disruption**  
+Jean-François Lachance-Caumartin
+
+[![DOI](https://img.shields.io/badge/DOI-10.6084/m9.figshare.32527359-blue)](https://doi.org/10.6084/m9.figshare.32527359)
+
+📄 **Download the full paper:** [`paper.pdf`](paper.pdf)
+
+The paper presents the complete specification, security analysis (differential, linear, rebound, invariant subspaces, algebraic degree), MILP bounds, and AVX2 benchmarks. All cryptanalysis scripts and verification tools are included in this repository.
 
 ---
 
@@ -41,7 +55,7 @@ To our knowledge, Krakken-2048 is the first 2048-bit permutation to achieve **fu
 Each round consists of eight carefully ordered transformations:
 
 | Step          | Name         | Description |
-|---------------|--------------|-----------|
+|---------------|--------------|-------------|
 | 1             | **Theta**    | Column-parity diffusion |
 | 2             | **Tentacle** | GF(2⁸) circulant MDS matrix (branch number 9) |
 | 3             | **Rho**      | Per-word rotations (32 distinct offsets) |
@@ -56,7 +70,7 @@ Each round consists of eight carefully ordered transformations:
 ## Key Features
 
 | Feature              | Specification |
-|----------------------|-------------|
+|----------------------|---------------|
 | **State size**       | 2048 bits (256 bytes) |
 | **Rate / Capacity**  | 1280 / 768 bits |
 | **Rounds**           | 10 |
@@ -143,15 +157,7 @@ Additional tools include rebound search scripts, MILP optimizers, and test vecto
 - `degree_tracking.c` — Algebraic degree propagation tool
 - Multiple rebound, MILP, and verification scripts
 - `SCRIPTS.md` — Complete inventory of **205 cryptanalysis scripts**
-
----
-
-## Paper
-
-**Krakken-2048 Abyssal: An SPN-ARX Hybrid Permutation and the Case for Algebraic Structure Disruption**  
-Jean-François Lachance-Caumartin
-
-*(Full paper available on IACR ePrint — link pending submission)*
+- `paper.pdf` — Full academic paper with specification and security analysis
 
 ---
 
@@ -171,7 +177,3 @@ MIT License. See [LICENSE](LICENSE) for details.
 **🦑 Released into the Abyss — 2026**
 
 *From the depths, with precision.*
-```
-- Stronger thematic consistency with the kraken/abyssal motif
-
-Would you like a more aggressive/dark version, or a slightly more academic one? I can iterate further.
