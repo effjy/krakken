@@ -1,4 +1,6 @@
-# Krakken-2048 Abyssal
+<div align="center">
+
+<a href="https://github.com/effjy/krakken/"><img src="titles/krakken-2048-abyssal-title.svg" height="52" alt="Krakken-2048 Abyssal"></a>
 
 **An SPN-ARX Hybrid Cryptographic Permutation**
 
@@ -8,6 +10,8 @@
 [![Standard](https://img.shields.io/badge/standard-Sponge%20AEAD-blue)]()
 [![Tentacles](https://img.shields.io/badge/tentacles-9-00FFCC)](https://github.com/effjy/krakken)
 [![DOI](https://img.shields.io/badge/DOI-10.6084/m9.figshare.32527359-blue)](https://doi.org/10.6084/m9.figshare.32527359)
+
+</div>
 
 <p align="center">
   <img src="https://github.com/effjy/krakken/blob/main/krakken_logo.png" alt="Krakken-2048 Abyssal Logo" width="240">
